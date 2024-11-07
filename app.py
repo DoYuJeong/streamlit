@@ -1,5 +1,5 @@
 # app.py
 import streamlit as st
 
-st.title("Exploratory Data Analystis")
-st.write("Hello, statistics!")
+st.title("도유정")
+# st.write("Hello, statistics!")
