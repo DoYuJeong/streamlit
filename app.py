@@ -112,6 +112,10 @@ def main():
 if __name__ == "__main__":
     main()
 
+df = load_and_process_data(file_path)
+st.write("Data preview:", df.head())
+
+
 # # Streamlit 앱
 # def main():
 #     st.title("Thermoelectric Property Dashboard")
