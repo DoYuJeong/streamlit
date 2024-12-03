@@ -1,32 +1,49 @@
 # app.py
 import streamlit as st
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import ast
 
-# st.title("도유정")
-# # st.write("도유정, 박주은, 윤부성, 김종진")
+link = st.link_button("Go to 20241101_starrydata2 download", url="https://figshare.com/projects/Starrydata_datasets/155129")
 
-# link = st.link_button("Go to 20241101_starrydata2 download", url="https://figshare.com/projects/Starrydata_datasets/155129")
-
-# app.py
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import ast
 
-# 데이터 처리 함수
+# 데이터 로드 및 처리 함수
 def load_and_process_data(uploaded_file):
     def eval_columns(col):
-        return col.apply(ast.literal_eval)  # 문자열을 Python 리스트로 변환
+        try:
+            return col.apply(ast.literal_eval)
+        except Exception as e:
+            st.error(f"Error parsing column values: {e}")
+            return col
 
-    # 데이터 로드
+    # 업로드된 파일에서 데이터 로드
     try:
         df = pd.read_csv(uploaded_file, usecols=['prop_x', 'prop_y', 'x', 'y', 'sample_id'])
         df['x'] = eval_columns(df['x'])
         df['y'] = eval_columns(df['y'])
         return df
     except Exception as e:
-        st.error(f"Error loading or processing data: {e}")
+        st.error(f"Error loading data: {e}")
         return None
+
+# 열전 물성이 모두 존재하는 샘플 필터링 함수
+def filter_samples_with_all_properties(df):
+    # 각 열전 물성에 해당하는 데이터 필터링
+    seebeck_samples = df[df['prop_y'] == 'Seebeck coefficient']['sample_id'].unique()
+    conductivity_samples = df[df['prop_y'] == 'Electrical conductivity']['sample_id'].unique()
+    thermal_samples = df[df['prop_y'] == 'Thermal conductivity']['sample_id'].unique()
+    ZT_samples = df[df['prop_y'] == 'ZT']['sample_id'].unique()
+
+    # 모든 열전 물성이 존재하는 샘플 ID 교집합
+    common_samples = set(seebeck_samples) & set(conductivity_samples) & set(thermal_samples) & set(ZT_samples)
+    
+    return df[df['sample_id'].isin(common_samples)], common_samples
 
 # 데이터프레임 생성 함수
 def create_property_df(df, sample_id, prop_y, column_name):
@@ -93,26 +110,32 @@ def plot_graphs(sample_id, df):
 # Streamlit 앱
 def main():
     st.title("Thermoelectric Property Dashboard")
+    st.write("Upload your CSV file to get started.")
 
     # 파일 업로드
     uploaded_file = st.file_uploader("Upload your CSV file", type="csv")
-    if uploaded_file is None:
-        st.info("Please upload a CSV file to proceed.")
-        return
+    if uploaded_file is not None:
+        df = load_and_process_data(uploaded_file)  # 파일 업로드 후 처리
+        if df is not None:
+            st.write("Data loaded successfully!")
+            st.write(df.head())
 
-    # 데이터 로드
-    df = load_and_process_data(uploaded_file)
-    if df is None:
-        return
-    
-    # 샘플 ID 선택
-    sample_ids = df['sample_id'].unique()
-    sample_id = st.selectbox("Select Sample ID:", sample_ids)
-    if sample_id:
-        st.write(f"Graphs for Sample ID: {sample_id}")
-        plot_graphs(sample_id, df)
+            # 열전 물성이 모두 존재하는 샘플 필터링
+            filtered_df, common_samples = filter_samples_with_all_properties(df)
+            if not common_samples:
+                st.error("No samples with all thermoelectric properties found!")
+                return
+
+            # 샘플 ID 선택
+            sample_id = st.selectbox("Select Sample ID (with all properties):", sorted(common_samples))
+            if sample_id:
+                st.write(f"Graphs for Sample ID: {sample_id}")
+                plot_graphs(sample_id, filtered_df)
+    else:
+        st.info("Please upload a CSV file to proceed.")
 
 if __name__ == "__main__":
     main()
+
 
 
