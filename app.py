@@ -13,23 +13,19 @@ import numpy as np
 import matplotlib.pyplot as plt
 import ast
 
-# 절대 경로를 사용하여 파일 경로 지정
-file_path = r"C:\Users\User\Desktop\한국전기연구원 인턴\figshare_data_20241101\starrydata_curves.csv"
-
-def load_and_process_data(file_path):
-    import pandas as pd
-    import ast
+# 데이터 처리 함수
+def load_and_process_data(uploaded_file):
     def eval_columns(col):
-        return col.apply(ast.literal_eval)
-    
+        return col.apply(ast.literal_eval)  # 문자열을 Python 리스트로 변환
+
     # 데이터 로드
     try:
-        df = pd.read_csv(file_path, usecols=['prop_x', 'prop_y', 'x', 'y', 'sample_id'])
+        df = pd.read_csv(uploaded_file, usecols=['prop_x', 'prop_y', 'x', 'y', 'sample_id'])
         df['x'] = eval_columns(df['x'])
         df['y'] = eval_columns(df['y'])
         return df
-    except FileNotFoundError:
-        st.error(f"File not found: {file_path}")
+    except Exception as e:
+        st.error(f"Error loading or processing data: {e}")
         return None
 
 # 데이터프레임 생성 함수
@@ -97,12 +93,19 @@ def plot_graphs(sample_id, df):
 # Streamlit 앱
 def main():
     st.title("Thermoelectric Property Dashboard")
-    st.write(f"Using file: {file_path}")
 
-    df = load_and_process_data(file_path)
+    # 파일 업로드
+    uploaded_file = st.file_uploader("Upload your CSV file", type="csv")
+    if uploaded_file is None:
+        st.info("Please upload a CSV file to proceed.")
+        return
+
+    # 데이터 로드
+    df = load_and_process_data(uploaded_file)
     if df is None:
         return
     
+    # 샘플 ID 선택
     sample_ids = df['sample_id'].unique()
     sample_id = st.selectbox("Select Sample ID:", sample_ids)
     if sample_id:
@@ -112,28 +115,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-df = load_and_process_data(file_path)
-st.write("Data preview:", df.head())
-
-
-# # Streamlit 앱
-# def main():
-#     st.title("Thermoelectric Property Dashboard")
-#     st.write("Select a sample ID to view the corresponding graphs.")
-
-#     # 데이터 로드
-#     file_path = 'starrydata_curves.csv'  # 데이터 파일 경로
-#     df = load_and_process_data(file_path)
-
-#     # Sample ID 선택
-#     sample_ids = df['sample_id'].unique()
-#     sample_id = st.selectbox("Select Sample ID:", sample_ids)
-
-#     # 그래프 출력
-#     if sample_id:
-#         st.write(f"Graphs for Sample ID: {sample_id}")
-#         plot_graphs(sample_id, df)
-
-# if __name__ == "__main__":
-#     main()
 
