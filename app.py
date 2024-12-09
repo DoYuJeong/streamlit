@@ -121,29 +121,30 @@ def main():
     # 파일 업로드
     uploaded_file = st.file_uploader("Upload your CSV file", type="csv")
     if uploaded_file is not None:
-        # 데이터 전체 로드
-        df = load_and_process_data(uploaded_file)
+        df = load_and_process_data(uploaded_file)  # 파일 업로드 후 처리
         if df is not None:
             st.write("Data loaded successfully!")
-            st.write(df.head())
+            # 열전 물성이 모두 존재하는 샘플 필터링
+            filtered_df, common_samples = filter_samples_with_all_properties(df)
+            if not common_samples:
+                st.error("No samples with all thermoelectric properties found!")
+                return
 
             # 샘플 ID 선택
-            sample_ids = df['sample_id'].unique()
-            sample_id = st.selectbox("Select Sample ID:", sorted(sample_ids))
+            sample_id = st.selectbox("Select Sample ID (with all properties):", sorted(common_samples))
             if sample_id:
-                # 선택된 샘플 ID 데이터 로드
-                sample_data = load_and_process_data(uploaded_file, sample_id=sample_id)
-                st.write(f"Data for Sample ID: {sample_id}")
-                st.write(sample_data)
+                # 샘플 ID에 해당하는 데이터 추출
+                df_data = df[df['sample_id'] == sample_id]
+                st.write(f"Filtered DataFrame for sample_id {sample_id}:")
+                st.write(df_data)  # Streamlit에서 데이터프레임 출력
 
                 # 그래프 그리기
-                plot_TEP(sample_data, sample_id)
+                st.write(f"Graphs for Sample ID: {sample_id}")
+                plot_graphs(sample_id, filtered_df)
     else:
         st.info("Please upload a CSV file to proceed.")
 
 if __name__ == "__main__":
     main()
-
-
 
 
