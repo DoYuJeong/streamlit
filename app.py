@@ -14,14 +14,34 @@ def load_and_process_data(uploaded_file):
             return col
 
     try:
+        # Thermoelectric 데이터 파일 읽기
         df = pd.read_csv(uploaded_file, usecols=['prop_x', 'prop_y', 'x', 'y', 'sample_id'])
         df['x'] = eval_columns(df['x'])
         df['y'] = eval_columns(df['y'])
         return df
     except Exception as e:
-        st.error(f"Error loading data: {e}")
+        st.error(f"Error loading thermoelectric data file: {e}")
         return None
 
+# DOI 데이터를 로드하는 함수
+def load_doi_data(doi_file):
+    try:
+        # DOI 데이터 파일 읽기
+        doi_df = pd.read_csv(doi_file, usecols=['SID', 'DOI', 'URL'])
+        return doi_df
+    except Exception as e:
+        st.error(f"Error loading DOI data file: {e}")
+        return None
+
+# Thermoelectric 데이터와 DOI 데이터를 병합하는 함수
+def merge_thermoelectric_with_doi(thermoelectric_df, doi_df):
+    try:
+        # 병합: sample_id(SID)를 기준으로 DOI 데이터 연결
+        merged_df = thermoelectric_df.merge(doi_df, left_on='sample_id', right_on='SID', how='left')
+        return merged_df
+    except Exception as e:
+        st.error(f"Error merging data: {e}")
+        return thermoelectric_df
 # 열전 물성이 모두 존재하는 샘플 필터링 함수
 def filter_samples_with_all_properties(df, property_mappings):
     property_samples = {}
@@ -129,46 +149,42 @@ def plot_TEP(df, sample_id):
 # Streamlit 앱
 def main():
     st.title("Thermoelectric Property Dashboard")
-    st.write("Upload your CSV file to get started.")
 
-    uploaded_file = st.file_uploader("Upload your CSV file", type="csv")
-    if uploaded_file is not None:
-        df = load_and_process_data(uploaded_file)
-        if df is not None:
-            st.write("Data loaded successfully!")
-            property_mappings = {
-                'sigma': (
-                    ['Electrical conductivity', 'Electrical resistivity'], 
-                    None
-                ),
-                'alpha': (
-                    ['Seebeck coefficient', 'thermopower'], 
-                    None
-                ),
-                'k': (
-                    ['Thermal conductivity', 'total thermal conductivity'], 
-                    None
-                ),
-                'ZT': (
-                    ['ZT'], 
-                    None
-                )
-            }
+    # 사이드바: 파일 업로드
+    st.sidebar.header("Upload Files")
+    data_file = st.sidebar.file_uploader("Upload Thermoelectric Data (CSV)", type="csv")
+    doi_file = st.sidebar.file_uploader("Upload DOI Data (CSV)", type="csv")
 
-            filtered_df, common_samples = filter_samples_with_all_properties(df, property_mappings)
-            if not common_samples:
-                st.error("No samples with all thermoelectric properties found!")
-                return
+    if data_file and doi_file:
+        # 데이터 로드
+        thermoelectric_df = load_and_process_data(data_file)
+        doi_df = load_doi_data(doi_file)
 
-            sample_id = st.selectbox("Select Sample ID (with all properties):", sorted(common_samples))
+        if thermoelectric_df is not None and doi_df is not None:
+            # Thermoelectric 데이터와 DOI 데이터 병합
+            merged_df = merge_thermoelectric_with_doi(thermoelectric_df, doi_df)
+            st.write("Data loaded and merged successfully!")
+
+            # 샘플 ID 선택
+            sample_ids = sorted(merged_df['sample_id'].unique())
+            sample_id = st.sidebar.selectbox("Select Sample ID:", sample_ids)
+
             if sample_id:
-                st.write(f"Filtered DataFrame for Sample ID {sample_id}:")
-                st.write(df[df['sample_id'] == sample_id])
+                # 선택한 샘플 ID 데이터 필터링
+                sample_data = merged_df[merged_df['sample_id'] == sample_id]
+                st.write(f"### Data Table for Sample ID: {sample_id}")
+                st.dataframe(sample_data)
 
-                st.write(f"Graphs for Sample ID: {sample_id}")
-                plot_TEP(filtered_df, sample_id)
-    else:
-        st.info("Please upload a CSV file to proceed.")
+                # DOI 정보 출력
+                doi_info = sample_data[['DOI', 'URL']].drop_duplicates()
+                if not doi_info.empty:
+                    doi = doi_info['DOI'].iloc[0]
+                    url = doi_info['URL'].iloc[0]
+                    st.write(f"**DOI**: [Link]({doi})")
+                    st.write(f"**URL**: [Visit]({url})")
+                else:
+                    st.write("**DOI**: Not Available")
+                    st.write("**URL**: Not Available")
 
 if __name__ == "__main__":
     main()
