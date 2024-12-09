@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import ast
 
 # 데이터 로드 및 처리 함수
-def load_and_process_data(uploaded_file, sample_id=None):
+def load_and_process_data(uploaded_file):
     def eval_columns(col):
         try:
             return col.apply(ast.literal_eval)
@@ -13,68 +13,81 @@ def load_and_process_data(uploaded_file, sample_id=None):
             st.error(f"Error parsing column values: {e}")
             return col
 
-    # 업로드된 파일에서 데이터 로드
     try:
         df = pd.read_csv(uploaded_file, usecols=['prop_x', 'prop_y', 'x', 'y', 'sample_id'])
         df['x'] = eval_columns(df['x'])
         df['y'] = eval_columns(df['y'])
-
-        # 특정 샘플 ID만 필터링
-        if sample_id is not None:
-            df = df[df['sample_id'] == sample_id]
-
         return df
     except Exception as e:
         st.error(f"Error loading data: {e}")
         return None
 
-# 그래프 그리기 함수
+# 열전 물성이 모두 존재하는 샘플 필터링 함수
+def filter_samples_with_all_properties(df, property_mappings):
+    property_samples = {}
+
+    # 각 물성별 샘플 ID를 추출
+    for prop_key, (properties, _) in property_mappings.items():
+        property_samples[prop_key] = df[df['prop_y'].isin(properties)]['sample_id'].unique()
+
+    # 공통 샘플 ID를 계산
+    common_samples = set.intersection(*[set(samples) for samples in property_samples.values()])
+    return df[df['sample_id'].isin(common_samples)], common_samples
+
+# TEP 그래프 그리기 함수
 def plot_TEP(df, sample_id):
-    # 온도 변환 함수
     def process_temperature(row):
         if row['prop_x'] == 'Inverse temperature':
             return [1/t if t != 0 else np.nan for t in row['x']]
         return row['x']
 
-    # 데이터프레임 생성 함수
-    def create_property_df(prop_y_list, column_name, transform_func=None):
-        # prop_y 조건에 맞는 데이터 필터링
-        new_df = df[(df['prop_x'].isin(['Temperature', 'Inverse temperature'])) &
-                    (df['prop_y'].isin(prop_y_list)) &
-                    (df['sample_id'] == sample_id)].copy()
+    def create_property_df(filtered_df, column_name, transform_func=None):
+        if filtered_df.empty:
+            return pd.DataFrame(columns=['sample_id', 'temperature', column_name])
 
-        if new_df.empty:
-            return pd.DataFrame(columns=['sample_id', 'temperature', column_name])  # 빈 데이터프레임 반환
+        lens = filtered_df['y'].map(len)
+        sample_ids = filtered_df['sample_id'].repeat(lens).values
+        temperatures = np.concatenate(filtered_df.apply(process_temperature, axis=1).values)
+        values = np.concatenate(filtered_df.apply(lambda row: transform_func(row) if transform_func else row['y'], axis=1).values)
 
-        # 리스트 길이 계산
-        lens = new_df['y'].map(len)
-        sample_ids = new_df['sample_id'].repeat(lens).values
-
-        # 온도 데이터 처리
-        temperatures = np.concatenate(new_df.apply(process_temperature, axis=1).values)
-
-        # 물성 데이터 변환 (필요시 transform_func 적용)
-        values = np.concatenate(new_df.apply(lambda row: transform_func(row) if transform_func else row['y'], axis=1).values)
-
-        # 최종 데이터프레임 생성
         return pd.DataFrame({
             'sample_id': sample_ids,
             'temperature': temperatures,
             column_name: values
         })
 
-    # 변환 함수 정의
-    def transform_sigma(row):
-        if row['prop_y'] == 'Electrical resistivity':
-            # Electrical resistivity의 역수를 취해 Electrical conductivity로 변환
-            return [1/v if v != 0 else np.nan for v in row['y']]
-        return row['y']  # Electrical conductivity는 그대로 사용
+    property_mappings = {
+        'sigma': (
+            ['Electrical conductivity', 'Electrical resistivity'], 
+            lambda row: [1/v if v != 0 else np.nan for v in row['y']] if row['prop_y'] == 'Electrical resistivity' else row['y']
+        ),
+        'alpha': (
+            ['Seebeck coefficient', 'thermopower'], 
+            None
+        ),
+        'k': (
+            ['Thermal conductivity', 'total thermal conductivity'], 
+            None
+        ),
+        'ZT': (
+            ['ZT'], 
+            None
+        )
+    }
 
-    # 데이터프레임 생성
-    df_sigma = create_property_df(['Electrical conductivity', 'Electrical resistivity'], 'sigma', transform_sigma).sort_values(by='temperature')
-    df_alpha = create_property_df(['Seebeck coefficient', 'thermopower'], 'alpha').sort_values(by='temperature')
-    df_k = create_property_df(['Thermal conductivity', 'total thermal conductivity'], 'k').sort_values(by='temperature')
-    df_ZT = create_property_df(['ZT'], 'ZT').sort_values(by='temperature')
+    def create_property_dataframes(df, sample_id, property_mappings):
+        dataframes = {}
+        for column_name, (properties, transform_func) in property_mappings.items():
+            filtered_df = df[(df['prop_y'].isin(properties)) & (df['sample_id'] == sample_id)]
+            dataframes[column_name] = create_property_df(filtered_df, column_name, transform_func).sort_values(by='temperature')
+        return dataframes
+
+    dataframes = create_property_dataframes(df, sample_id, property_mappings)
+
+    df_sigma = dataframes['sigma']
+    df_alpha = dataframes['alpha']
+    df_k = dataframes['k']
+    df_ZT = dataframes['ZT']
 
     # 그래프 그리기
     figsize = (10, 8)
@@ -118,29 +131,42 @@ def main():
     st.title("Thermoelectric Property Dashboard")
     st.write("Upload your CSV file to get started.")
 
-    # 파일 업로드
     uploaded_file = st.file_uploader("Upload your CSV file", type="csv")
     if uploaded_file is not None:
-        df = load_and_process_data(uploaded_file)  # 파일 업로드 후 처리
+        df = load_and_process_data(uploaded_file)
         if df is not None:
             st.write("Data loaded successfully!")
-            # 열전 물성이 모두 존재하는 샘플 필터링
-            filtered_df, common_samples = filter_samples_with_all_properties(df)
+            property_mappings = {
+                'sigma': (
+                    ['Electrical conductivity', 'Electrical resistivity'], 
+                    None
+                ),
+                'alpha': (
+                    ['Seebeck coefficient', 'thermopower'], 
+                    None
+                ),
+                'k': (
+                    ['Thermal conductivity', 'total thermal conductivity'], 
+                    None
+                ),
+                'ZT': (
+                    ['ZT'], 
+                    None
+                )
+            }
+
+            filtered_df, common_samples = filter_samples_with_all_properties(df, property_mappings)
             if not common_samples:
                 st.error("No samples with all thermoelectric properties found!")
                 return
 
-            # 샘플 ID 선택
             sample_id = st.selectbox("Select Sample ID (with all properties):", sorted(common_samples))
             if sample_id:
-                # 샘플 ID에 해당하는 데이터 추출
-                df_data = df[df['sample_id'] == sample_id]
-                st.write(f"Filtered DataFrame for sample_id {sample_id}:")
-                st.write(df_data)  # Streamlit에서 데이터프레임 출력
+                st.write(f"Filtered DataFrame for Sample ID {sample_id}:")
+                st.write(df[df['sample_id'] == sample_id])
 
-                # 그래프 그리기
                 st.write(f"Graphs for Sample ID: {sample_id}")
-                plot_graphs(sample_id, filtered_df)
+                plot_TEP(filtered_df, sample_id)
     else:
         st.info("Please upload a CSV file to proceed.")
 
