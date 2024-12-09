@@ -105,6 +105,9 @@ def plot_TEP(df, sample_id):
 
     dataframes = create_property_dataframes(df, sample_id, property_mappings)
 
+    if return_dataframes:
+        return dataframes
+    
     df_sigma = dataframes['sigma']
     df_alpha = dataframes['alpha']
     df_k = dataframes['k']
@@ -204,6 +207,30 @@ def main():
                 else:
                     st.write("**DOI**: Not Available")
                     st.write("**URL**: Not Available")
+
+                # 그래프 그리기를 위한 데이터프레임 생성
+                dataframes = plot_TEP(filtered_df, sample_id, return_dataframes=True)
+
+                # 전처리된 데이터프레임 출력
+                st.write(f"### Processed Data for Sample ID: {sample_id}")
+
+                if dataframes:
+                    df_sigma = dataframes.get('sigma', pd.DataFrame())
+                    df_alpha = dataframes.get('alpha', pd.DataFrame())
+                    df_k = dataframes.get('k', pd.DataFrame())
+                    df_ZT = dataframes.get('ZT', pd.DataFrame())
+
+                    st.write("#### Sigma")
+                    st.dataframe(df_sigma)
+
+                    st.write("#### Alpha")
+                    st.dataframe(df_alpha)
+
+                    st.write("#### Thermal Conductivity (k)")
+                    st.dataframe(df_k)
+
+                    st.write("#### ZT")
+                    st.dataframe(df_ZT)
 
                 # 그래프 그리기
                 st.write("### Property Graphs")
