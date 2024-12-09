@@ -56,7 +56,8 @@ def filter_samples_with_all_properties(df, property_mappings):
     return df[df['sample_id'].isin(common_samples)], common_samples
 
 # TEP 그래프 그리기 함수
-def plot_TEP(df, sample_id):
+# TEP 그래프 그리기 함수 (수정)
+def plot_TEP(df, sample_id, return_dataframes=False):
     def process_temperature(row):
         if row['prop_x'] == 'Inverse temperature':
             return [1/t if t != 0 else np.nan for t in row['x']]
@@ -105,9 +106,10 @@ def plot_TEP(df, sample_id):
 
     dataframes = create_property_dataframes(df, sample_id, property_mappings)
 
-    if return_dataframes:
+    if return_dataframes:  # 데이터프레임 반환
         return dataframes
-    
+
+    # 데이터프레임 준비
     df_sigma = dataframes['sigma']
     df_alpha = dataframes['alpha']
     df_k = dataframes['k']
@@ -148,10 +150,9 @@ def plot_TEP(df, sample_id):
         ax4.grid(True)
 
     plt.tight_layout()
-    st.pyplot(fig)  # Streamlit에서 그래프 표시
+    st.pyplot(fig)
 
-
-# Streamlit 앱
+# Streamlit 앱 (수정)
 def main():
     st.title("Thermoelectric Property Dashboard")
 
@@ -240,4 +241,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
 
